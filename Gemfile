@@ -5,4 +5,5 @@ gem "bundler"
 
 group :test do
   gem "redis"
+  gem "SystemTimer", :require => "system_timer"
 end
