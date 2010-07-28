@@ -12,7 +12,7 @@ module Redisk
     }
 
     class << self
-      def start
+      def start(options)
         puts "Starting Redisk on port #{PORT}"
         EventMachine::run {
           EventMachine::start_server "127.0.0.1", PORT, Redisk::Server

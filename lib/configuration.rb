@@ -2,34 +2,35 @@ require 'optparse'
 
 module Redisk
   class Config
+    attr_accessor :options
     def initialize(argv)
-    options = {}
+    @options = {}
       OptionParser.new do |opts|
-        opts.banner = "Usage: redisk [options]"
+        opts.banner = "Usage: redisk -c redisk.yml -p [port] -h [host] -P [db_prefix]"
 
-        # pass yaml with port, host, path_prefix options
+        # pass yaml with port, host, path_prefix @options
         opts.on( '-c', '--config-file [/path/to/config.yml]', "Config file" ) do |c|
           require 'yaml'
-          options.merge!(YAML.load_file(c))
+          @options.merge!(YAML.load_file(c))
         end
 
-        options[:port] = 6380
+        @options[:port] = 6380
         opts.on( '-p', '--port [NUM]', Integer, "Port to run redisk" ) do |p|
-          options[:port] = p
+          @options[:port] = p
         end
 
-        options[:host] = '127.0.0.1'
+        @options[:host] = '127.0.0.1'
         opts.on( '-h', '--host [ip.of.red.isk]', "Port to run redisk" ) do |h|
-          options[:host] = h
+          @options[:host] = h
         end
 
-        options[:path_prefix] =  '/tmp/'
+        @options[:db_prefix] =  '/tmp/'
         opts.on( '-P', '--prefix [/path/to/store]', "Prefix path for Redisk" ) do |p|
-          options[:path_prefix] = p
+          @options[:db_prefix] = p
         end
 
       end.parse!
-      p options
+      p @options
       p ARGV
     end
   end

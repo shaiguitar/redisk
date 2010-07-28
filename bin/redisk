@@ -1,5 +1,6 @@
 #!/usr/bin/env ruby
 
 require 'lib/redisk'
-
-Redisk::Server.start
+require 'lib/configuration'
+config = Redisk::Config.new(ARGV)
+Redisk::Server.start(config.options)
