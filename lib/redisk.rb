@@ -1,4 +1,6 @@
 require 'eventmachine'
+require 'digest/sha1'
+require 'fileutils'
 
 module Redisk
   class Server < EventMachine::Connection
@@ -9,6 +11,8 @@ module Redisk
       :get => {:params => 1},
       :set => {:params => 2}
     }
+
+    class KeyNotFound < StandardError; end
 
     class << self
       attr_accessor :db_prefix
@@ -35,7 +39,6 @@ module Redisk
       if @command && @command.size > 0
         command_options = COMMANDS[@command.first]
         if command_options && @command.size == command_options[:params] + 1
-          p @command
           command = @command.shift
           args = @command
           run_command command, args
@@ -88,6 +91,10 @@ module Redisk
     def response(obj)
       if obj.nil?
         send_data "$-1#{CRLF}"
+      elsif obj.is_a?(File)
+        send_data "+"
+        send_file_data obj.path
+        send_data CRLF
       else
         send_data "+#{obj.to_s}#{CRLF}"
       end
@@ -100,28 +107,49 @@ module Redisk
     def run_command(command, args=[])
       method = "redisk_command_#{command}"
       if self.respond_to?(method)
+        puts "Received command #{command} #{args.inspect}"
         self.send method, args
       else
         ok_response
       end
     end
 
+    def redisk_file_path(key, write=false)
+      hashed_key = Digest::SHA1.hexdigest(sanitize_key(key))
+      hashed_dir = File.join(Redisk::Server.db_prefix, hashed_key[0..Redisk::Server.num_dirs-1])
+      FileUtils.mkdir_p(hashed_dir) if write && !File.exist?(hashed_dir)
+      File.join(hashed_dir,hashed_key)
+    end
+
+    def redisk_file(key, write=false)
+      begin
+        File.new(redisk_file_path(key, write), write ? "w" : "r")
+      rescue Errno::ENOENT
+        raise KeyNotFound
+      end
+    end
+
     def redisk_command_get(args=[])
-      response @data[sanitize_key(args.first)]
+      response redisk_file(args.first)
+    rescue KeyNotFound
+      response nil
     end
 
     def redisk_command_set(args=[])
-      require 'digest/sha1'
-      hashed_key = Digest::SHA1.hexdigest(sanitize_key(args.first))
-      require 'fileutils'
-      hashed_dir = File.join(Redisk::Server.db_prefix, hashed_key.scan(/../)[0..Redisk::Server.num_dirs-1])
-      FileUtils.mkdir_p(hashed_dir)
-      File.new(File.join(hashed_dir,hashed_key), "w").write(args[1])
-      @data[sanitize_key(args.first)] = args[1]
+      f = redisk_file(args.first, true)
+      f.write(args[1])
+      f.close
       ok_response
     end
 
     def redisk_command_flushdb(args=[])
+      chars = %w(0 1 2 3 4 5 6 7 8 9 a b c d e)
+      chars.each do |c|
+        chars.each do |c2|
+          dir = File.join(Redisk::Server.db_prefix, "#{c}#{c2}")
+          FileUtils.rm_rf(dir) if File.exist?(dir)
+        end
+      end
       ok_response
     end
   end

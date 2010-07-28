@@ -35,8 +35,6 @@ module Redisk
         end
 
       end.parse!
-      p @options
-      p ARGV
     end
   end
 end
