@@ -2,12 +2,13 @@ require 'test/unit'
 require 'redis'
 require 'system_timer'
 
+$:.unshift(File.join(File.dirname(__FILE__), '..', 'lib'))
+require 'redisk'
+
 class Test::Unit::TestCase
   REDISK_TEST_PORT = 18913
   def start_server
     @server = fork do
-      $:.unshift(File.join(File.dirname(__FILE__), '..', 'lib'))
-      require 'redisk'
       config = Redisk::Config.new([])
       config.options[:port] = REDISK_TEST_PORT
       Redisk::Server.start(config.options)
