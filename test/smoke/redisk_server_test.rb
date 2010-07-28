@@ -40,4 +40,9 @@ class RediskServerTest < Test::Unit::TestCase
     @redis.set "foo", data
     assert_equal 2 * 1024, @redis.get("foo").size
   end
+
+  def test_info
+    info = @redis.info
+    assert_not_nil info
+  end
 end

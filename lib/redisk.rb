@@ -12,7 +12,8 @@ module Redisk
       :get => {:params => 1},
       :set => {:params => 1, :extra_read_param => true},
       :del => {:params => 1},
-      :exists => {:params => 1}
+      :exists => {:params => 1},
+      :info => {:params => 0}
     }
 
     class KeyNotFound < StandardError; end
@@ -98,6 +99,10 @@ module Redisk
         @parse_state = :read_attributes
       when "exists"
         @command << :exists
+        @in_command = true
+        @parse_state = :read_attributes
+      when "info"
+        @command << :info
         @in_command = true
         @parse_state = :read_attributes
       else
@@ -229,6 +234,23 @@ module Redisk
         end
       end
       ok_response
+    end
+
+    def redisk_command_info(args=[])
+      info = <<-EOF
+redis_version:REDISK-0.0.1
+connected_clients:1
+connected_slaves:0
+used_memory:3187
+changes_since_last_save:0
+last_save_time:1237655729
+total_connections_received:1
+total_commands_processed:1
+uptime_in_seconds:25
+uptime_in_days:0
+EOF
+      info.gsub!(/\n/, CRLF)
+      response info
     end
   end
 end
