@@ -12,8 +12,11 @@ module Redisk
     }
 
     class << self
+      attr_accessor :db_prefix
+
       def start(options)
         puts "Starting Redisk on port #{PORT}"
+        Redisk::Server.db_prefix = options[:db_prefix]
         EventMachine::run {
           EventMachine::start_server "127.0.0.1", PORT, Redisk::Server
         }
