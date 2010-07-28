@@ -209,7 +209,7 @@ module Redisk
     def redisk_command_del(args=[])
       path_for_key = redisk_file_path(args.first)
       if File.exist?(path_for_key) 
-        File.rm(path_for_key) 
+        FileUtils.rm(path_for_key) 
         response(1)  #todo handle more than one del X key. 
       else
         response(0)
