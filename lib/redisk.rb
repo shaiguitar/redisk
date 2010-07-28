@@ -26,6 +26,7 @@ module Redisk
       @in_command = false
     end
 
+    # if right amount of params of passed, run_commnand_x
     def execute_command
       if @command && @command.size > 0
         command_options = COMMANDS[@command.first]
@@ -106,6 +107,9 @@ module Redisk
     end
 
     def redisk_command_set(args=[])
+      require 'digest/sha1'
+      hashed_key = Digest::SHA1.hexdigest(sanitize_key(args.first))
+      File.new(hashed_key, "w").write(args[1])
       @data[sanitize_key(args.first)] = args[1]
       ok_response
     end
