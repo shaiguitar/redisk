@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
-require 'lib/redisk'
-require 'lib/configuration'
+$:.unshift(File.join(File.dirname(__FILE__), '..', 'lib'))
+
+require 'redisk'
 config = Redisk::Config.new(ARGV)
 Redisk::Server.start(config.options)

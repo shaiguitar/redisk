@@ -4,7 +4,7 @@ module Redisk
   class Config
     attr_accessor :options
     def initialize(argv)
-    @options = {}
+      @options = {}
       OptionParser.new do |opts|
         opts.banner = "Usage: redisk -c redisk.yml -p [port] -h [host] -P [db_prefix]"
 

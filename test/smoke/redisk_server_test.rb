@@ -3,7 +3,7 @@ require 'test_helper'
 class RediskServerTest < Test::Unit::TestCase
   def setup
     start_server
-    @redis = Redis.new(:port => 6380)
+    @redis = Redis.new(:port => REDISK_TEST_PORT)
     @redis.flushdb
   end
 

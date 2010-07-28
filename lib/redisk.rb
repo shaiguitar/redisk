@@ -1,6 +1,7 @@
 require 'eventmachine'
 require 'digest/sha1'
 require 'fileutils'
+require 'redisk/config'
 
 module Redisk
   class Server < EventMachine::Connection
@@ -116,7 +117,7 @@ module Redisk
 
     def redisk_file_path(key, write=false)
       hashed_key = Digest::SHA1.hexdigest(sanitize_key(key))
-      hashed_dir = File.join(Redisk::Server.db_prefix, hashed_key[0..Redisk::Server.num_dirs-1])
+      hashed_dir = File.join(Redisk::Server.db_prefix, hashed_key.scan(/../)[0..Redisk::Server.num_dirs-1])
       FileUtils.mkdir_p(hashed_dir) if write && !File.exist?(hashed_dir)
       File.join(hashed_dir,hashed_key)
     end
