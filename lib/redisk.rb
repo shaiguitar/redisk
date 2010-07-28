@@ -10,7 +10,7 @@ module Redisk
       :quit => {:params => 0},
       :flushdb => {:params => 0},
       :get => {:params => 1},
-      :set => {:params => 2},
+      :set => {:params => 1, :extra_read_param => true},
       :del => {:params => 1},
       :exists => {:params => 1}
     }
@@ -35,6 +35,8 @@ module Redisk
       @data = {}
       @command = []
       @in_command = false
+      @write_to_file = nil
+      @parse_state = :waiting
     end
 
     # if right amount of params of passed, run_commnand_x
@@ -42,37 +44,64 @@ module Redisk
       if @command && @command.size > 0
         command_options = COMMANDS[@command.first]
         if command_options && @command.size == command_options[:params] + 1
+          @parse_state = :executing
           command = @command.shift
           args = @command
           run_command command, args
           @command = []
           @in_command = false
+          @parse_state = :wating if @parse_state != :write_to_file
         end
       end
     end
 
     def handle_line(line)
-      return if line.chars.first == "$"
+      chars = line.chars.to_a
+      if chars.first == "*"
+        chars.shift
+        @parse_state = :command
+        return
+      end
+      if chars.first == "$"
+        chars.shift
+        return
+      end
+
+      if @parse_state == :write_to_file
+        f = File.new(@write_to_file, "a")
+        f.write(line)
+        f.close
+        @write_to_file = nil
+        @parse_state = :waiting
+        ok_response
+        return
+      end
+
       case line
       when "quit"
         close_connection
       when "get"
         @command << :get
         @in_command = true
+        @parse_state = :read_attributes
       when "set"
         @command << :set
         @in_command = true
+        @parse_state = :read_attributes
       when "flushdb"
         @command << :flushdb
         @in_command = true
+        @parse_state = :read_attributes
       when "del"
         @command << :del
         @in_command = true
+        @parse_state = :read_attributes
       when "exists"
         @command << :exists
         @in_command = true
-     else
-        if @in_command
+        @parse_state = :read_attributes
+      else
+        if @parse_state == :read_attributes
           @command << line
         end
       end
@@ -81,14 +110,38 @@ module Redisk
     end
 
     def receive_data(data)
+      if @parse_state == :write_to_file
+        @buffer = data
+        if @buffer.include?(CRLF)
+          line, buffer = @buffer.split(CRLF, 2)
+          if line
+            @buffer = buffer
+            f = File.new(@write_to_file, "a")
+            f.write(line)
+            f.close
+            @write_to_file = nil
+            @parse_state = :waiting
+            ok_response
+          end
+        else
+          f = File.new(@write_to_file, "a")
+          f.write(@buffer)
+          f.close
+          @buffer = ""
+        end
+        return if @buffer.size == 0
+        data = ""
+      end
       @buffer ||= ""
       @buffer << data
       line = " "
-      while line && line.size > 0
+      while line && line.size > 0 && @buffer
         line, buffer = @buffer.split(CRLF, 2)
-        if line
+        if line && line.size > 0
           @buffer = buffer
           handle_line line
+        else
+          @buffer = buffer
         end
       end
     end
@@ -148,9 +201,9 @@ module Redisk
 
     def redisk_command_set(args=[])
       f = redisk_file(args.first, true)
-      f.write(args[1])
+      @write_to_file = f.path
       f.close
-      ok_response
+      @parse_state = :write_to_file
     end
 
     def redisk_command_del(args=[])
@@ -171,7 +224,7 @@ module Redisk
       chars = %w(0 1 2 3 4 5 6 7 8 9 a b c d e)
       chars.each do |c|
         chars.each do |c2|
-          dir = File.join(Redisk::Server.db_prefix, "#{c}#{c2}")
+          dir = File.join(Redisk::Server.db_prefix || "/tmp", "#{c}#{c2}")
           FileUtils.rm_rf(dir) if File.exist?(dir)
         end
       end

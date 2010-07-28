@@ -34,4 +34,10 @@ class RediskServerTest < Test::Unit::TestCase
     assert_equal "bar", @redis.get("foo")
   end
 
+  def test_huge_set
+    data = ""
+    1024.times { data << "ab" }
+    @redis.set "foo", data
+    assert_equal 2 * 1024, @redis.get("foo").size
+  end
 end
