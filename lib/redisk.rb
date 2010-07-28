@@ -72,6 +72,7 @@ module Redisk
         f = File.new(@write_to_file, "a")
         f.write(line)
         f.close
+        File.rename(@write_to_file, @write_to_file_target)
         @write_to_file = nil
         @parse_state = :waiting
         ok_response
@@ -124,6 +125,7 @@ module Redisk
             f = File.new(@write_to_file, "a")
             f.write(line)
             f.close
+            File.rename(@write_to_file, @write_to_file_target)
             @write_to_file = nil
             @parse_state = :waiting
             ok_response
@@ -190,9 +192,13 @@ module Redisk
       File.join(hashed_dir,hashed_key)
     end
 
-    def redisk_file(key, write=false)
+    def redisk_file(key, write=false, temp=false)
       begin
-        File.new(redisk_file_path(key, write), write ? "w" : "r")
+        if temp
+          File.new(redisk_file_path(key, write)+".tmp#{signature}", write ? "w" : "r")
+        else
+          File.new(redisk_file_path(key, write), write ? "w" : "r")
+        end
       rescue Errno::ENOENT
         raise KeyNotFound
       end
@@ -205,8 +211,9 @@ module Redisk
     end
 
     def redisk_command_set(args=[])
-      f = redisk_file(args.first, true)
+      f = redisk_file(args.first, true, true)
       @write_to_file = f.path
+      @write_to_file_target = redisk_file_path(args.first, false)
       f.close
       @parse_state = :write_to_file
     end
