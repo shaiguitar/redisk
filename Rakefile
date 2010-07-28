@@ -1,6 +1,8 @@
 require 'rake/testtask'
 require 'test/unit'
 
+task :default => ["test:units"]
+
 namespace :test do
   Rake::TestTask.new(:units) do |t|
     t.libs << "test"
