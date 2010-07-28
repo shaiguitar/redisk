@@ -10,7 +10,9 @@ module Redisk
       :quit => {:params => 0},
       :flushdb => {:params => 0},
       :get => {:params => 1},
-      :set => {:params => 2}
+      :set => {:params => 2},
+      :del => {:params => 1},
+      :exists => {:params => 1}
     }
 
     class KeyNotFound < StandardError; end
@@ -63,7 +65,13 @@ module Redisk
       when "flushdb"
         @command << :flushdb
         @in_command = true
-      else
+      when "del"
+        @command << :del
+        @in_command = true
+      when "exists"
+        @command << :exists
+        @in_command = true
+     else
         if @in_command
           @command << line
         end
@@ -141,6 +149,15 @@ module Redisk
       f.write(args[1])
       f.close
       ok_response
+    end
+
+    def redisk_command_del(args=[])
+      path_for_key = redisk_file_path(args.first)
+      File.exist?(path_for_key) ? File.rm(path_for_key) : (raise KeyNotFound)
+    end
+
+    def redisk_command_exists(args=[])
+      File.exist?(redisk_file_path(args.first))
     end
 
     def redisk_command_flushdb(args=[])
