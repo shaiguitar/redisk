@@ -29,6 +29,11 @@ module Redisk
           @options[:db_prefix] = p
         end
 
+        @options[:num_dirs] =  2
+        opts.on( '-D', '--num-dirs [num_dirs]', [1,2,3], "Directory hashing levels (1,2 or 3)" ) do |n|
+          @options[:num_dirs] = n
+        end
+
       end.parse!
       p @options
       p ARGV

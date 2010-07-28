@@ -2,7 +2,6 @@ require 'eventmachine'
 
 module Redisk
   class Server < EventMachine::Connection
-    PORT = 6380
     CRLF = "\r\n"
     COMMANDS = {
       :quit => {:params => 0},
@@ -13,12 +12,14 @@ module Redisk
 
     class << self
       attr_accessor :db_prefix
+      attr_accessor :num_dirs
 
       def start(options)
-        puts "Starting Redisk on port #{PORT}"
+        puts "Starting Redisk on port #{options[:port]}"
         Redisk::Server.db_prefix = options[:db_prefix]
+        Redisk::Server.num_dirs = options[:num_dirs]
         EventMachine::run {
-          EventMachine::start_server "127.0.0.1", PORT, Redisk::Server
+          EventMachine::start_server options[:host], options[:port], Redisk::Server
         }
       end
     end
@@ -112,7 +113,10 @@ module Redisk
     def redisk_command_set(args=[])
       require 'digest/sha1'
       hashed_key = Digest::SHA1.hexdigest(sanitize_key(args.first))
-      File.new(hashed_key, "w").write(args[1])
+      require 'fileutils'
+      hashed_dir = File.join(Redisk::Server.db_prefix, hashed_key.scan(/../)[0..Redisk::Server.num_dirs-1])
+      FileUtils.mkdir_p(hashed_dir)
+      File.new(File.join(hashed_dir,hashed_key), "w").write(args[1])
       @data[sanitize_key(args.first)] = args[1]
       ok_response
     end
