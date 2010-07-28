@@ -100,6 +100,8 @@ module Redisk
     def response(obj)
       if obj.nil?
         send_data "$-1#{CRLF}"
+      elsif obj.is_a?(Integer)
+        send_data ":#{obj}#{CRLF}"
       elsif obj.is_a?(File)
         send_data "+"
         send_file_data obj.path
@@ -153,11 +155,16 @@ module Redisk
 
     def redisk_command_del(args=[])
       path_for_key = redisk_file_path(args.first)
-      File.exist?(path_for_key) ? File.rm(path_for_key) : (raise KeyNotFound)
+      if File.exist?(path_for_key) 
+        File.rm(path_for_key) 
+        response(1)  #todo handle more than one del X key. 
+      else
+        response(0)
+      end
     end
 
     def redisk_command_exists(args=[])
-      File.exist?(redisk_file_path(args.first))
+      File.exist?(redisk_file_path(args.first)) ? response(1) : response(0)
     end
 
     def redisk_command_flushdb(args=[])

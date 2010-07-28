@@ -17,8 +17,17 @@ class RediskServerTest < Test::Unit::TestCase
 
   def test_simple_exists
     @redis.set("foo", "bar")
-    assert @redis.exists("foo")
+    assert_equal 1, @redis.exists("foo")
+    assert_equal 0, @redis.exists("non_existing_foo")
   end
+
+  def test_del
+    @redis.set("foo", "bar")
+    assert_equal 1, @redis.exists("foo")
+    @redis.del("foo")
+    assert_equal 0, @redis.exists("foo")
+  end
+
 
   def test_simple_set
     @redis.set "foo", "bar"
