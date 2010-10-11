@@ -1,4 +1,5 @@
 require 'test/unit'
+require 'rubygems'
 require 'redis'
 require 'system_timer'
 
@@ -7,6 +8,7 @@ require 'redisk'
 
 class Test::Unit::TestCase
   REDISK_TEST_PORT = 18913
+
   def start_server
     @server = fork do
       config = Redisk::Config.new([])

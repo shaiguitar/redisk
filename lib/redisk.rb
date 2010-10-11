@@ -2,8 +2,13 @@ require 'eventmachine'
 require 'digest/sha1'
 require 'fileutils'
 require 'redisk/config'
+require 'rubygems'
+require 'system_timer'
 
 module Redisk
+
+  VERSION="0.0.1" 
+
   class Server < EventMachine::Connection
     CRLF = "\r\n"
     COMMANDS = {
@@ -33,6 +38,7 @@ module Redisk
     end
 
     def post_init
+      puts "Client connected!"
       @data = {}
       @command = []
       @in_command = false
@@ -75,7 +81,7 @@ module Redisk
         File.rename(@write_to_file, @write_to_file_target)
         @write_to_file = nil
         @parse_state = :waiting
-        ok_response
+        response_ok
         return
       end
 
@@ -115,7 +121,9 @@ module Redisk
       execute_command
     end
 
+    # here the client handling is done. http://eventmachine.rubyforge.org/EventMachine/Connection.html#M000269
     def receive_data(data)
+      puts "Received data #{data.inspect}"
       if @parse_state == :write_to_file
         @buffer = data
         if @buffer.include?(CRLF)
@@ -128,7 +136,7 @@ module Redisk
             File.rename(@write_to_file, @write_to_file_target)
             @write_to_file = nil
             @parse_state = :waiting
-            ok_response
+            response_ok
           end
         else
           f = File.new(@write_to_file, "a")
@@ -157,21 +165,31 @@ module Redisk
       key
     end
 
+    # http://code.google.com/p/redis/wiki/ProtocolSpecification
     def response(obj)
       if obj.nil?
+        puts "Sent: $-1#{CRLF}"
         send_data "$-1#{CRLF}"
       elsif obj.is_a?(Integer)
+        puts "Sent: :#{obj}#{CRLF}"
         send_data ":#{obj}#{CRLF}"
       elsif obj.is_a?(File)
+        puts "Sent: +#{obj.path} file-data #{CRLF}"
         send_data "+"
         send_file_data obj.path
         send_data CRLF
-      else
-        send_data "+#{obj.to_s}#{CRLF}"
+      elsif obj.is_a?(String)
+        if obj.collect.size > 1
+          puts "Sent: $#{obj.size}#{CRLF}#{obj.to_s}#{CRLF}"
+          send_data "$#{obj.size}#{CRLF}#{obj.to_s}#{CRLF}"
+        else
+          puts "Sent: +#{obj.to_s}#{CRLF}"
+          send_data "+#{obj.to_s}#{CRLF}"
+        end
       end
     end
 
-    def ok_response
+    def response_ok
       response "OK"
     end
 
@@ -181,7 +199,7 @@ module Redisk
         puts "Received command #{command} #{args.inspect}"
         self.send method, args
       else
-        ok_response
+        response_ok
       end
     end
 
@@ -240,12 +258,12 @@ module Redisk
           FileUtils.rm_rf(dir) if File.exist?(dir)
         end
       end
-      ok_response
+      response_ok
     end
 
     def redisk_command_info(args=[])
       info = <<-EOF
-redis_version:REDISK-0.0.1
+redis_version:REDISK-#{Redisk::VERSION}
 connected_clients:1
 connected_slaves:0
 used_memory:3187
