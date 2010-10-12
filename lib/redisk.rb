@@ -14,6 +14,7 @@ module Redisk
     COMMANDS = {
       :quit => {:params => 0},
       :flushdb => {:params => 0},
+      :flushall => {:params => 0},
       :get => {:params => 1},
       :set => {:params => 1, :extra_read_param => true},
       :del => {:params => 1},
@@ -37,6 +38,7 @@ module Redisk
       end
     end
 
+    # client connection happens (EM).
     def post_init
       puts "Client connected!"
       @data = {}
@@ -46,22 +48,47 @@ module Redisk
       @parse_state = :waiting
     end
 
-    # if right amount of params of passed, run_commnand_x
-    def execute_command
-      if @command && @command.size > 0
-        command_options = COMMANDS[@command.first]
-        if command_options && @command.size == command_options[:params] + 1
-          @parse_state = :executing
-          command = @command.shift
-          args = @command
-          run_command command, args
-          @command = []
-          @in_command = false
-          @parse_state = :wating if @parse_state != :write_to_file
+    # here the client handling is done. http://eventmachine.rubyforge.org/EventMachine/Connection.html#M000269
+    # event machine doesn't pass connection data in any sane order/matter, so you need to parse it out here.
+    def receive_data(data)
+      puts "Received data #{data.inspect}"
+      if @parse_state == :write_to_file #in SET.
+        @buffer = data
+        if @buffer.include?(CRLF)
+          line, buffer = @buffer.split(CRLF, 2)
+          if line
+            @buffer = buffer
+            f = File.new(@write_to_file, "a")
+            f.write(line)
+            f.close
+            File.rename(@write_to_file, @write_to_file_target)
+            @write_to_file = nil
+            @parse_state = :waiting
+            response_ok
+          end
+        else
+          f = File.new(@write_to_file, "a")
+          f.write(@buffer)
+          f.close
+          @buffer = ""
+        end
+        return if @buffer.size == 0
+        data = ""
+      end
+      @buffer ||= ""
+      @buffer << data
+      line = " "
+      while line && line.size > 0 && @buffer
+        line, buffer = @buffer.split(CRLF, 2)
+        if line && line.size > 0
+          @buffer = buffer
+          handle_line(line)
+        else
+          @buffer = buffer
         end
       end
     end
-
+    
     def handle_line(line)
       chars = line.chars.to_a
       if chars.first == "*"
@@ -100,6 +127,10 @@ module Redisk
         @command << :flushdb
         @in_command = true
         @parse_state = :read_attributes
+      when "flushall"
+        @command << :flushall
+        @in_command = true
+        @parse_state = :read_attributes
       when "del"
         @command << :del
         @in_command = true
@@ -121,48 +152,28 @@ module Redisk
       execute_command
     end
 
-    # here the client handling is done. http://eventmachine.rubyforge.org/EventMachine/Connection.html#M000269
-    def receive_data(data)
-      puts "Received data #{data.inspect}"
-      if @parse_state == :write_to_file
-        @buffer = data
-        if @buffer.include?(CRLF)
-          line, buffer = @buffer.split(CRLF, 2)
-          if line
-            @buffer = buffer
-            f = File.new(@write_to_file, "a")
-            f.write(line)
-            f.close
-            File.rename(@write_to_file, @write_to_file_target)
-            @write_to_file = nil
-            @parse_state = :waiting
-            response_ok
-          end
-        else
-          f = File.new(@write_to_file, "a")
-          f.write(@buffer)
-          f.close
-          @buffer = ""
-        end
-        return if @buffer.size == 0
-        data = ""
-      end
-      @buffer ||= ""
-      @buffer << data
-      line = " "
-      while line && line.size > 0 && @buffer
-        line, buffer = @buffer.split(CRLF, 2)
-        if line && line.size > 0
-          @buffer = buffer
-          handle_line line
-        else
-          @buffer = buffer
+    # if right amount of params of passed, run_commnand_x
+    def execute_command
+      if @command && @command.size > 0
+        command_options = COMMANDS[@command.first]
+        if command_options && @command.size == command_options[:params] + 1
+          @parse_state = :executing
+          command = @command.shift
+          args = @command
+          run_command(command, args)
+          @command = []
+          @in_command = false
+          @parse_state = :wating if @parse_state != :write_to_file
         end
       end
     end
 
-    def sanitize_key(key)
-      key
+    def sanitize(key)
+      key.gsub("\r\n","\\r\\n")
+    end
+
+    def unsanitize(key)
+      key.gsub("\\r\\n","\r\n")
     end
 
     # http://code.google.com/p/redis/wiki/ProtocolSpecification
@@ -174,8 +185,9 @@ module Redisk
         puts "Sent: :#{obj}#{CRLF}"
         send_data ":#{obj}#{CRLF}"
       elsif obj.is_a?(File)
-        puts "Sent: +#{obj.path} file-data #{CRLF}"
-        send_data "+"
+        filesize=File.read(obj.path).size # prob a better way to do this. later.
+        puts "Sent: $#{filesize} send-file-data #{CRLF}"
+        send_data "$#{filesize}#{CRLF}"
         send_file_data obj.path
         send_data CRLF
       elsif obj.is_a?(String)
@@ -193,18 +205,8 @@ module Redisk
       response "OK"
     end
 
-    def run_command(command, args=[])
-      method = "redisk_command_#{command}"
-      if self.respond_to?(method)
-        puts "Received command #{command} #{args.inspect}"
-        self.send method, args
-      else
-        response_ok
-      end
-    end
-
     def redisk_file_path(key, write=false)
-      hashed_key = Digest::SHA1.hexdigest(sanitize_key(key))
+      hashed_key = Digest::SHA1.hexdigest(sanitize(key))
       hashed_dir = File.join(Redisk::Server.db_prefix, hashed_key.scan(/../)[0..Redisk::Server.num_dirs-1])
       FileUtils.mkdir_p(hashed_dir) if write && !File.exist?(hashed_dir)
       File.join(hashed_dir,hashed_key)
@@ -219,6 +221,17 @@ module Redisk
         end
       rescue Errno::ENOENT
         raise KeyNotFound
+      end
+    end
+
+    # redis commands hereon out and below.
+    def run_command(command, args=[])
+      method = "redisk_command_#{command}"
+      if self.respond_to?(method)
+        puts "Received command #{command} #{args.inspect}"
+        self.send method, args
+      else
+        response_ok
       end
     end
 
@@ -259,6 +272,10 @@ module Redisk
         end
       end
       response_ok
+    end
+
+    def redisk_command_flushall(args=[])
+      redisk_command_flushdb #for now
     end
 
     def redisk_command_info(args=[])
